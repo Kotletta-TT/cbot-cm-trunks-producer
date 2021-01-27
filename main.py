@@ -62,6 +62,8 @@ def request_api(channel):
         if vats.getSimCards():
             for sim in vats.simcards:
                 try:
+                    sim['provider'] = contract['provider']
+                    sim['contract'] = contract['name']
                     message = json.dumps(sim)
                 except:
                     logger.warning(f'Sim: {sim} incorrect JSON don`t send RabbitMQ')

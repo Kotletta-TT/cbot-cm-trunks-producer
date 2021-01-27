@@ -24,6 +24,8 @@ DATA_ACCESS = [
    - `RABBIT_QUEUE=имя очереди`
    - `LOG_LEVEL=уровень логирования (INFO, DEBUG, WARNING...)` - по умолчанию WARNING
    - `TIMEOUT_REQUEST=таймаут между запросами к API провайдеров`  - по умолчанию 0
+   Собрать `docker-build -t trunks-producer-build .`  
+   Запустить `docker run -it --rm --name trunks-producer-bot trunks-producer-build`  
     
 3. Локальный запуск:  
     Возможен, но не рекомендуется, действия для запуска:  
