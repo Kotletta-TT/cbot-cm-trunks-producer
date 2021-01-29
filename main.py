@@ -64,7 +64,9 @@ def request_api(channel):
                                            trunk_username=trunk_username,
                                            trunk_password=obj['trunk_password'],
                                            phone=phone,
-                                           attributes={})  # Надо ли что-то из Мегафона класть в атрибуты
+                                           attributes={},   # Надо ли что-то из Мегафона класть в атрибуты
+                                           lines=int(obj['lines'])
+                                           )
                         message = json.dumps(send_trunk.__dict__)
                         channel.basic_publish(exchange='', routing_key=RABBIT_QUEUE, body=message)
                         logger.info(f'Send trunk: {trunk["n"]} - {phone} queue: {RABBIT_QUEUE}')
