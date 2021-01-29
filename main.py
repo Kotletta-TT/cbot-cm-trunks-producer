@@ -1,23 +1,14 @@
 from MegafonAPI import VATS
 import pika
-import os
-import logging
 import json
 import time
-from config import DATA_ACCESS
+import re
+from models import Trunk
+from config import RABBIT_HOST, RABBIT_PORT, RABBIT_QUEUE, LOG_NAME, TIMEOUT_REQUEST, conf_parser
+from log_init import log_on
 
-RABBIT_HOST = os.environ.get('RABBIT_HOST')
-RABBIT_QUEUE = os.environ.get('RABBIT_QUEUE')
-LOG_LEVEL = os.environ.get('LOG_LEVEL') if os.environ.get('LOG_LEVEL') is not None else 'WARNING'
-TIMEOUT_REQUEST = int(os.environ.get('TIMEOUT_REQUEST')) if os.environ.get('TIMEOUT_REQUEST') is not None else 0
-
-logger = logging.getLogger('TRUNK-INFO')  # создаем логгер приложения
-logger.setLevel(LOG_LEVEL)
-logger.propagate = False  # отключаем стрим сообщений в корневой логгер
-console_handler = logging.StreamHandler()  # создаем объект Stream для вывода логов только на экран
-logger.addHandler(console_handler)
-formatter = logging.Formatter(fmt='%(levelname)s:[%(name)s]:%(message)s')
-console_handler.setFormatter(formatter)
+logger = log_on(LOG_NAME)
+DATA_ACCESS = conf_parser('contracts.yaml')
 
 
 def smart_timeout(attempts):
@@ -27,12 +18,16 @@ def smart_timeout(attempts):
         return time.sleep(60)
 
 
+def check_trunk(trunk_username):
+    return re.match(r'^[0-9]*admin[0-9]+$', trunk_username)
+
+
 def connect_rabbit_queue(fn):
     def wrapped():
         attempts = 0
         while True:
             try:
-                connection = pika.BlockingConnection(pika.ConnectionParameters(RABBIT_HOST))
+                connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBIT_HOST, port=RABBIT_PORT))
                 channel = connection.channel()
                 logger.debug(f'Connect to RabbitMQ address: {RABBIT_HOST}')
                 attempts = 0
@@ -42,7 +37,6 @@ def connect_rabbit_queue(fn):
                 smart_timeout(attempts)
                 attempts += 1
 
-        """# создать проверку существования очереди"""
         channel.queue_declare(queue=RABBIT_QUEUE)
         logger.debug(f'Queue select: {RABBIT_QUEUE}')
         fn(channel)
@@ -53,25 +47,32 @@ def connect_rabbit_queue(fn):
 
 @connect_rabbit_queue
 def request_api(channel):
-    for contract in DATA_ACCESS:
-        logger.info(f" Request to contract: {contract['name']} - provider: {contract['provider']}")
-        vats = VATS(address=contract['address'],
-                    user=contract['login'],
-                    password=contract['password'])
+    for obj in DATA_ACCESS:
+        logger.info(f" Request to object: {obj['obj']} - provider: {obj['provider']}")
+        vats = VATS(address=obj['address'],
+                    user=obj['login'],
+                    password=obj['password'])
 
-        if vats.getSimCards():
-            for sim in vats.simcards:
+        if vats.getUsers():
+            for trunk in vats.users:
                 try:
-                    sim['provider'] = contract['provider']
-                    sim['contract'] = contract['name']
-                    message = json.dumps(sim)
+                    trunk_username = trunk['n']
+                    phone = trunk['tn'][0] if 'tn' in trunk else None
+                    if check_trunk(trunk_username):
+                        send_trunk = Trunk(provider=obj['provider'],
+                                           obj=obj['obj'],
+                                           trunk_username=trunk_username,
+                                           trunk_password=obj['trunk_password'],
+                                           phone=phone,
+                                           attributes={})  # Надо ли что-то из Мегафона класть в атрибуты
+                        message = json.dumps(send_trunk.__dict__)
+                        channel.basic_publish(exchange='', routing_key=RABBIT_QUEUE, body=message)
+                        logger.info(f'Send trunk: {trunk["n"]} - {phone} queue: {RABBIT_QUEUE}')
                 except:
-                    logger.warning(f'Sim: {sim} incorrect JSON don`t send RabbitMQ')
+                    logger.warning(f'Trunk: {trunk} incorrect JSON don`t send RabbitMQ')
                     continue
-                channel.basic_publish(exchange='', routing_key='hello', body=message)
-                logger.info(f'Send phone: {sim["tn"]} queue: {RABBIT_QUEUE}')
         else:
-            logger.warning(f'NO CONNECTION to {contract["provider"]} OR no SIM to {contract["name"]}')
+            logger.warning(f'NO CONNECTION to {obj["provider"]} OR no TRUNKS to {obj["obj"]}')
 
 
 def main_loop():
