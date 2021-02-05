@@ -1,5 +1,5 @@
 import logging
-from config import LOG_LEVEL
+from config.conf import LOG_LEVEL
 
 
 def log_on(app_name):

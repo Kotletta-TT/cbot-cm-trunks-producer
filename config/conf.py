@@ -6,7 +6,7 @@ def conf_parser(filename):
         return yaml.safe_load(f)
 
 
-conf = conf_parser('config.yaml')
+conf = conf_parser('config/config.yaml')
 
 RABBIT_HOST = conf['rabbitmq']['host']
 RABBIT_PORT = conf['rabbitmq']['port']
